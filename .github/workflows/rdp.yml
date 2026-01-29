@@ -9,7 +9,7 @@ jobs:
 
     steps:
 
-      # Step 0: Checkout
+      # Step 0: Checkout (optional if you have scripts)
       - uses: actions/checkout@v4
 
       # Step 1: Enable RDP & create user safely
@@ -33,10 +33,17 @@ jobs:
               Write-Host "Password for $User updated successfully."
           }
 
-      # Step 2: Create Tools folder
+      # Step 2: Create Tools folder safely
       - name: Create Tools folder
         shell: pwsh
-        run: mkdir C:\Tools
+        run: |
+          $toolsFolder = "C:\Tools"
+          if (-not (Test-Path $toolsFolder)) {
+              New-Item -ItemType Directory -Path $toolsFolder
+              Write-Host "$toolsFolder created."
+          } else {
+              Write-Host "$toolsFolder already exists, skipping creation."
+          }
 
       # Step 3: Download Telegram + WinRAR
       - name: Download Apps
