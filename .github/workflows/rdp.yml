@@ -1,4 +1,4 @@
-name: Windows RDP with Tailscale + Apps + Custom User
+name: Windows RDP with Tailscale + Apps + AOT Intro
 
 on:
   workflow_dispatch:
@@ -44,6 +44,23 @@ jobs:
         Invoke-WebRequest https://www.rarlab.com/rar/winrar-x64-621.exe -OutFile winrar.exe
         Start-Process winrar.exe -ArgumentList "/S" -Wait
 
+    - name: Add Attack on Titan Intro at Startup
+      run: |
+        mkdir C:\Intro
+
+        # Download AOT Intro Video
+        Invoke-WebRequest "https://archive.org/download/aot-intro1/AOT_Intro_1.mp4" -OutFile "C:\Intro\aot.mp4"
+
+        # Create launcher script
+        $launcher = @'
+Start-Process "wmplayer.exe" "C:\Intro\aot.mp4"
+'@
+        Set-Content -Path "C:\Intro\play_intro.ps1" -Value $launcher
+
+        # Place in Startup folder
+        $startup = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\play_intro.ps1"
+        Copy-Item "C:\Intro\play_intro.ps1" $startup
+
     - name: Show Tailscale IP
       run: |
         & "C:\Program Files\Tailscale\tailscale.exe" ip
@@ -51,7 +68,6 @@ jobs:
     - name: Keep Alive
       run: |
         Write-Host "======================================"
-        Write-Host "RDP READY — CONNECT USING TAILSCALE IP"
-        Write-Host "Username: (your RDP_USER secret)"
+        Write-Host " RDP READY — AOT INTRO WILL PLAY 😁 "
         Write-Host "======================================"
         Start-Sleep -Seconds 21600
