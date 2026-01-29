@@ -1,0 +1,57 @@
+name: Windows RDP with Tailscale + Apps + Custom User
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 360   # 6 hours
+
+    steps:
+    - name: Install Tailscale
+      run: |
+        Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe -OutFile tailscale.exe
+        Start-Process tailscale.exe -ArgumentList "/silent" -Wait
+
+    - name: Start Tailscale and login
+      env:
+        TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+      run: |
+        Start-Service tailscale
+        & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --unattended
+
+    - name: Create RDP User
+      env:
+        RDP_USER: ${{ secrets.RDP_USER }}
+        RDP_PASS: ${{ secrets.RDP_PASS }}
+      run: |
+        net user $env:RDP_USER $env:RDP_PASS /add
+        net localgroup administrators $env:RDP_USER /add
+
+    - name: Enable RDP
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+    - name: Install Telegram
+      run: |
+        Invoke-WebRequest https://telegram.org/dl/desktop/win -OutFile telegram.exe
+        Start-Process telegram.exe -ArgumentList "/silent" -Wait
+
+    - name: Install WinRAR
+      run: |
+        Invoke-WebRequest https://www.rarlab.com/rar/winrar-x64-621.exe -OutFile winrar.exe
+        Start-Process winrar.exe -ArgumentList "/S" -Wait
+
+    - name: Show Tailscale IP
+      run: |
+        & "C:\Program Files\Tailscale\tailscale.exe" ip
+
+    - name: Keep Alive
+      run: |
+        Write-Host "======================================"
+        Write-Host "RDP READY — CONNECT USING TAILSCALE IP"
+        Write-Host "Username: (your RDP_USER secret)"
+        Write-Host "======================================"
+        Start-Sleep -Seconds 21600
