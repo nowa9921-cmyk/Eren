@@ -1,4 +1,4 @@
-name: Windows RDP + Tailscale Full
+name: Windows RDP + Tailscale + Eren Full Setup
 
 on:
   workflow_dispatch:
@@ -10,16 +10,13 @@ jobs:
     steps:
 
       # -----------------------
-      # Step 1: Enable RDP & create user safely
+      # Step 1: Enable RDP & create hardcoded user
       # -----------------------
-      - name: Enable RDP and create user safely
-        env:
-          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
-          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+      - name: Enable RDP and create user
         shell: pwsh
         run: |
-          $User = $env:RDP_USERNAME
-          $Pass = $env:RDP_PASSWORD
+          $User = "Eren_Yeager"
+          $Pass = "Mikasa_Ackerman"
 
           Write-Host "=== Enabling RDP ==="
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -39,105 +36,104 @@ jobs:
               Add-LocalGroupMember -Group "Administrators" -Member $User
               Write-Host "$User added to Administrators."
           } catch {
-              Write-Host "User $User may already be an Administrator."
+              Write-Host "$User is already Administrator."
           }
 
       # -----------------------
-      # Step 2: Create Tools Folder
+      # Step 2: Create Tools folder
       # -----------------------
       - name: Create Tools Folder
         shell: pwsh
         run: mkdir C:\Tools
 
       # -----------------------
-      # Step 3: Download Apps (Telegram + WinRAR)
+      # Step 3: Download Telegram + WinRAR
       # -----------------------
       - name: Download Apps
         shell: pwsh
         run: |
-          Write-Host "Downloading Telegram..."
           curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "C:\Tools\telegram.exe"
-          Write-Host "Downloading WinRAR..."
           curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "C:\Tools\winrar.exe"
 
       # -----------------------
-      # Step 4: Download Tailscale
+      # Step 4: Download & install Tailscale
       # -----------------------
       - name: Download Tailscale
         shell: pwsh
-        run: |
-          curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\Tools\tailscale.exe"
+        run: curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\Tools\tailscale.exe"
 
-      # -----------------------
-      # Step 5: Install Tailscale silently
-      # -----------------------
-      - name: Install Tailscale
+      - name: Install Tailscale silently
         shell: pwsh
-        run: |
-          Start-Process "C:\Tools\tailscale.exe" -ArgumentList "/S" -Wait
+        run: Start-Process "C:\Tools\tailscale.exe" -ArgumentList "/S" -Wait
 
       # -----------------------
-      # Step 6: Start Tailscale and auto-login
+      # Step 5: Start Tailscale and login
       # -----------------------
-      - name: Start Tailscale and Login
+      - name: Start Tailscale
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         shell: pwsh
         run: |
-          Write-Host "Starting Tailscale with auth key..."
           & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname=GitHub-RDP
 
       # -----------------------
-      # Step 7: Show Tailscale IP
+      # Step 6: Download wallpapers & auto-change every 10s
       # -----------------------
-      - name: Show Tailscale IP
+      - name: Eren Wallpapers Auto-Change
         shell: pwsh
         run: |
-          Write-Host "Your Tailscale IP:"
-          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          # Create wallpaper folder
+          $wallFolder = "C:\Tools\Wallpapers"
+          if (-not (Test-Path $wallFolder)) { New-Item -ItemType Directory -Path $wallFolder }
+
+          # Download wallpapers
+          $wallpapers = @(
+              "https://i.imgur.com/UoPRCob.jpeg",
+              "https://i.imgur.com/yoti0KT.jpeg",
+              "https://i.imgur.com/2IfezjK.jpeg"
+          )
+
+          for ($i = 0; $i -lt $wallpapers.Count; $i++) {
+              $file = Join-Path $wallFolder ("wallpaper{0}.jpeg" -f ($i+1))
+              Invoke-WebRequest -Uri $wallpapers[$i] -OutFile $file
+          }
+
+          # Function to set wallpaper
+          function Set-Wallpaper($path) {
+              $code = @"
+using System.Runtime.InteropServices;
+public class Wallpaper {
+    [DllImport("user32.dll",SetLastError=true)]
+    public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+"@
+              Add-Type $code
+              [Wallpaper]::SystemParametersInfo(20, 0, $path, 3)
+          }
+
+          # Auto-change wallpaper every 10 seconds (loop)
+          Write-Host "Starting Eren wallpaper slideshow..."
+          while ($true) {
+              foreach ($wall in Get-ChildItem $wallFolder) {
+                  Set-Wallpaper $wall.FullName
+                  Start-Sleep -Seconds 10
+              }
+          }
 
       # -----------------------
-      # Step 8: Keep Runner Alive
+      # Step 7: Keep Runner Alive + show RDP info
       # -----------------------
-      - name: Keep Runner Alive
-        env:
-          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
+      - name: Keep Runner Alive + Show RDP Info
         shell: pwsh
         run: |
           Write-Host "====================================="
           Write-Host "RDP READY!"
-          Write-Host "Username: $env:RDP_USERNAME"
-          Write-Host "Use the Tailscale IP above in Remote Desktop"
-          Write-Host "Apps (Telegram + WinRAR) are installed in C:\Tools"
-          Write-Host "Keeping system alive for 50 minutes..."
-          Write-Host "====================================="
-          Start-Sleep -Seconds 3000
-      - name: Download Tailscale
-        run: |
-          curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\Tools\tailscale.exe"
-
-      - name: Install Tailscale
-        run: |
-          Start-Process "C:\Tools\tailscale.exe" -ArgumentList "/S" -Wait
-
-      - name: Start Tailscale and Login
-        env:
-          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
-        run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname=GitHub-RDP
-
-      - name: Show Tailscale IP
-        run: |
+          Write-Host "Server (Tailscale IP):"
           & "C:\Program Files\Tailscale\tailscale.exe" ip -4
-
-      - name: Keep Runner Alive
-        env:
-          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
-        run: |
-          Write-Host "====================================="
-          Write-Host "RDP READY!"
-          Write-Host "Username: $env:RDP_USERNAME"
-          Write-Host "Use the Tailscale IP above in Remote Desktop"
-          Write-Host "Keeping system alive for 50 minutes..."
+          Write-Host "Username: Eren_Yeager"
+          Write-Host "Password: Mikasa_Ackerman"
+          Write-Host "Apps installed in C:\Tools"
+          Write-Host "Wallpaper slideshow every 10 seconds is active"
+          Write-Host "Keep this window open to maintain RDP access"
           Write-Host "====================================="
           Start-Sleep -Seconds 3000
