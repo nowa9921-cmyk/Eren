@@ -45,19 +45,33 @@ jobs:
           curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "$tools\Telegram.exe"
           curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "$tools\WinRAR.exe"
 
-      - name: Tailscale Setup (UNCHANGED)
+      - name: Tailscale Auto-login
         shell: pwsh
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          # YOUR ORIGINAL TAILSCALE STEPS GO HERE
-          # DO NOT MODIFY ANYTHING
-          Write-Host "Tailscale step left exactly as original workflow"
+          $tsExe="$env:ProgramFiles\Tailscale\tailscale.exe"
+          
+          # Auto-login and auto-connect
+          & $tsExe up --authkey=$env:TS_AUTHKEY --hostname=gh-runner-$env:GITHUB_RUN_ID
+
+          # Wait for IP assignment
+          $tsIP=$null
+          for ($i=0; $i -lt 12; $i++) {
+              $tsIP = & $tsExe ip -4
+              if ($tsIP) { break }
+              Start-Sleep 5
+          }
+
+          if (-not $tsIP) { Write-Error "Tailscale IP not assigned"; exit 1 }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
       - name: Show RDP Info
         shell: pwsh
         run: |
           Write-Host "=================================="
           Write-Host "RDP READY!"
-          Write-Host "Server IP (from Tailscale): $env:TAILSCALE_IP"
+          Write-Host "Server IP (Tailscale): $env:TAILSCALE_IP"
           Write-Host "Username: $env:RDP_USER"
           Write-Host "Password: $env:RDP_PASS"
           Write-Host "Apps installed in C:\Tools"
