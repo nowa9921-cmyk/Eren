@@ -1,71 +1,107 @@
-name: RDP + Tailscale + Eren Setup
+name: RDP
 
 on:
   workflow_dispatch:
 
 jobs:
-  rdp-setup:
+  secure-rdp:
     runs-on: windows-latest
     timeout-minutes: 3600
 
     steps:
-      - name: Enable RDP
-        shell: pwsh
+      - name: Configure Core RDP Settings
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name SecurityLayer -Value 0 -Force
-          netsh advfirewall firewall delete rule name="RDP-Tailscale" 2>$null
-          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
-          Restart-Service TermService -Force
+          # Enable Remote Desktop and disable Network Level Authentication (if needed)
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+                             -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+                             -Name "SecurityLayer" -Value 0 -Force
 
-      - name: Create RDP User
-        shell: pwsh
+          # Remove any existing rule with the same name to avoid duplication
+          netsh advfirewall firewall delete rule name="RDP-Tailscale"
+          
+          # For testing, allow any incoming connection on port 3389
+          netsh advfirewall firewall add rule name="RDP-Tailscale" `
+            dir=in action=allow protocol=TCP localport=3389
+
+          # (Optional) Restart the Remote Desktop service to ensure changes take effect
+          Restart-Service -Name TermService -Force
+
+      - name: Create RDP User with Secure Password
         run: |
-          # HARD-CODED USER/PASSWORD
+          # Hardcoded user/password
           $User = "Eren_Yeager"
           $Pass = "Mikasa_Ackerman"
-          $secure = ConvertTo-SecureString $Pass -AsPlainText -Force
-
+          $securePass = ConvertTo-SecureString $Pass -AsPlainText -Force
+          
           if (-not (Get-LocalUser -Name $User -ErrorAction SilentlyContinue)) {
-              New-LocalUser -Name $User -Password $secure -AccountNeverExpires
+              New-LocalUser -Name $User -Password $securePass -AccountNeverExpires
               Add-LocalGroupMember -Group "Administrators" -Member $User
               Add-LocalGroupMember -Group "Remote Desktop Users" -Member $User
           } else {
-              Set-LocalUser -Name $User -Password $secure
+              Set-LocalUser -Name $User -Password $securePass
           }
 
-          echo "RDP_USER=$User" >> $env:GITHUB_ENV
-          echo "RDP_PASS=$Pass" >> $env:GITHUB_ENV
+          echo "RDP_CREDS=User: $User | Password: $Pass" >> $env:GITHUB_ENV
+          
+          if (-not (Get-LocalUser -Name $User)) {
+              Write-Error "User creation failed"
+              exit 1
+          }
 
-      - name: Manual Tailscale Login
-        shell: pwsh
+      - name: Install Tailscale
         run: |
-          Write-Host "=== Manual Tailscale Setup ==="
-          Write-Host "Step 1: Download Tailscale"
-          Write-Host "Link: https://pkgs.tailscale.com/stable/tailscale-setup.exe"
-          Write-Host "Step 2: Run Tailscale and login manually."
-          Write-Host "Step 3: Run 'tailscale up' to connect."
-          Write-Host "Step 4: Run 'tailscale ip -4' to get server IP."
-          Write-Host "=============================="
+          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
+          $installerPath = "$env:TEMP\tailscale.msi"
+          
+          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
+          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
+          Remove-Item $installerPath -Force
 
-      - name: Install Apps (after Tailscale)
-        shell: pwsh
+      - name: Establish Tailscale Connection
         run: |
-          $tools="C:\Tools"
-          if (-not (Test-Path $tools)) { New-Item -ItemType Directory -Path $tools }
-          curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "$tools\Telegram.exe"
-          curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "$tools\WinRAR.exe"
-          Write-Host "Apps installed in C:\Tools"
+          # Bring up Tailscale with the provided auth key and set a unique hostname
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+          
+          # Wait for Tailscale to assign an IP
+          $tsIP = $null
+          $retries = 0
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+          
+          if (-not $tsIP) {
+              Write-Error "Tailscale IP not assigned. Exiting."
+              exit 1
+          }
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+      
+      - name: Verify RDP Accessibility
+        run: |
+          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
+          
+          # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          if (-not $testResult.TcpTestSucceeded) {
+              Write-Error "TCP connection to RDP port 3389 failed"
+              exit 1
+          }
+          Write-Host "TCP connectivity successful!"
 
-      - name: Show RDP Info
-        shell: pwsh
+      - name: Maintain Connection
         run: |
-          Write-Host "=================================="
-          Write-Host "RDP READY!"
-          Write-Host "Username: $env:RDP_USER"
-          Write-Host "Password: $env:RDP_PASS"
-          Write-Host "Apps installed in C:\Tools"
-          Write-Host "Please complete Tailscale login manually to get the server IP."
-          Write-Host "=================================="
-          while ($true) { Start-Sleep 300 }
+          Write-Host "`n=== RDP ACCESS ==="
+          Write-Host "Address: $env:TAILSCALE_IP"
+          Write-Host "Username: Eren_Yeager"
+          Write-Host "Password: Mikasa_Ackerman"
+          Write-Host "==================`n"
+          
+          # Keep runner active indefinitely (or until manually cancelled)
+          while ($true) {
+              Write-Host "[$(Get-Date)] RDP Active - Use Ctrl+C in workflow to terminate"
+              Start-Sleep -Seconds 300
+          }
