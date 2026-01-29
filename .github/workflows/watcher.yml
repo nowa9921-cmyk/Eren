@@ -1,0 +1,17 @@
+name: Watcher - Auto Restart RDP Workflow
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # runs every 5 minutes
+  workflow_dispatch:
+
+jobs:
+  check-main:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger main workflow
+        uses: peter-evans/workflow-dispatch@v1
+        with:
+          workflow: "Windows RDP + Tailscale + Eren Setup.yml"  # exact filename of main workflow
+          ref: main
