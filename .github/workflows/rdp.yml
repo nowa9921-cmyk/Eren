@@ -19,21 +19,10 @@ jobs:
           netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
           Restart-Service TermService -Force
 
-      - name: Manual Tailscale Login (FIRST)
-        shell: pwsh
-        run: |
-          Write-Host "=== Manual Tailscale Setup ==="
-          Write-Host "Step 1: Download Tailscale"
-          Write-Host "Link: https://pkgs.tailscale.com/stable/tailscale-setup.exe"
-          Write-Host "Step 2: Run Tailscale, login manually."
-          Write-Host "Step 3: Run 'tailscale up' to connect."
-          Write-Host "Step 4: Run 'tailscale ip -4' to get server IP."
-          Write-Host "=============================="
-          Write-Host "Wait here until Tailscale is connected..."
-
       - name: Create RDP User
         shell: pwsh
         run: |
+          # HARD-CODED USER/PASSWORD
           $User = "Eren_Yeager"
           $Pass = "Mikasa_Ackerman"
           $secure = ConvertTo-SecureString $Pass -AsPlainText -Force
@@ -49,12 +38,22 @@ jobs:
           echo "RDP_USER=$User" >> $env:GITHUB_ENV
           echo "RDP_PASS=$Pass" >> $env:GITHUB_ENV
 
-      - name: Install Apps (AFTER Tailscale)
+      - name: Manual Tailscale Login
+        shell: pwsh
+        run: |
+          Write-Host "=== Manual Tailscale Setup ==="
+          Write-Host "Step 1: Download Tailscale"
+          Write-Host "Link: https://pkgs.tailscale.com/stable/tailscale-setup.exe"
+          Write-Host "Step 2: Run Tailscale and login manually."
+          Write-Host "Step 3: Run 'tailscale up' to connect."
+          Write-Host "Step 4: Run 'tailscale ip -4' to get server IP."
+          Write-Host "=============================="
+
+      - name: Install Apps (after Tailscale)
         shell: pwsh
         run: |
           $tools="C:\Tools"
           if (-not (Test-Path $tools)) { New-Item -ItemType Directory -Path $tools }
-          Write-Host "Installing Apps..."
           curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "$tools\Telegram.exe"
           curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "$tools\WinRAR.exe"
           Write-Host "Apps installed in C:\Tools"
