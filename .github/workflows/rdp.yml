@@ -9,35 +9,28 @@ jobs:
 
     steps:
 
-      # Step 0: Checkout (if needed for scripts)
+      # Step 0: Checkout
       - uses: actions/checkout@v4
 
-      # Step 1: Enable RDP & create user
+      # Step 1: Enable RDP & create user safely
       - name: Enable RDP and create user
         shell: pwsh
         run: |
           $User = "Eren_Yeager"
-          $Pass = "Mikasa_Ackerman"
+          $Pass = "Mikasa_Yeager"
 
           Write-Host "=== Enabling RDP ==="
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
 
-          Write-Host "=== Creating or updating user ==="
+          Write-Host "=== Creating or updating user safely ==="
           if (-not (Get-LocalUser -Name $User -ErrorAction SilentlyContinue)) {
-              net user "$User" "$Pass" /add
-              Write-Host "User $User created."
-          } else {
-              net user "$User" "$Pass"
-              Write-Host "Password updated for $User."
-          }
-
-          Write-Host "=== Adding user to Administrators group ==="
-          try {
+              New-LocalUser -Name $User -Password (ConvertTo-SecureString $Pass -AsPlainText -Force)
               Add-LocalGroupMember -Group "Administrators" -Member $User
-              Write-Host "$User added to Administrators."
-          } catch {
-              Write-Host "$User is already Administrator."
+              Write-Host "User $User created and added to Administrators."
+          } else {
+              Set-LocalUser -Name $User -Password (ConvertTo-SecureString $Pass -AsPlainText -Force)
+              Write-Host "Password for $User updated successfully."
           }
 
       # Step 2: Create Tools folder
@@ -78,7 +71,7 @@ jobs:
           Write-Host "Server (Tailscale IP):"
           & "C:\Program Files\Tailscale\tailscale.exe" ip -4
           Write-Host "Username: Eren_Yeager"
-          Write-Host "Password: Mikasa_Ackerman"
+          Write-Host "Password: Mikasa_Yeager"
           Write-Host "Apps installed in C:\Tools"
           Write-Host "Wallpaper step skipped to avoid errors"
           Write-Host "Keep this window open to maintain RDP access"
