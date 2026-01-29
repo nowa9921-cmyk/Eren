@@ -8,33 +8,110 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Enable RDP and set credentials safely
+
+      # -----------------------
+      # Step 1: Enable RDP & create user safely
+      # -----------------------
+      - name: Enable RDP and create user safely
         env:
           RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
           RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+        shell: pwsh
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
           $User = $env:RDP_USERNAME
           $Pass = $env:RDP_PASSWORD
 
-          if (!(Get-LocalUser -Name $User -ErrorAction SilentlyContinue)) {
+          Write-Host "=== Enabling RDP ==="
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+          Write-Host "=== Creating or updating user ==="
+          if (-not (Get-LocalUser -Name $User -ErrorAction SilentlyContinue)) {
               net user "$User" "$Pass" /add
+              Write-Host "User $User created."
           } else {
               net user "$User" "$Pass"
+              Write-Host "Password updated for $User."
           }
 
-          Add-LocalGroupMember -Group "Administrators" -Member $User
+          Write-Host "=== Adding user to Administrators group ==="
+          try {
+              Add-LocalGroupMember -Group "Administrators" -Member $User
+              Write-Host "$User added to Administrators."
+          } catch {
+              Write-Host "User $User may already be an Administrator."
+          }
 
+      # -----------------------
+      # Step 2: Create Tools Folder
+      # -----------------------
       - name: Create Tools Folder
+        shell: pwsh
         run: mkdir C:\Tools
 
+      # -----------------------
+      # Step 3: Download Apps (Telegram + WinRAR)
+      # -----------------------
       - name: Download Apps
+        shell: pwsh
         run: |
+          Write-Host "Downloading Telegram..."
           curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "C:\Tools\telegram.exe"
+          Write-Host "Downloading WinRAR..."
           curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "C:\Tools\winrar.exe"
 
+      # -----------------------
+      # Step 4: Download Tailscale
+      # -----------------------
+      - name: Download Tailscale
+        shell: pwsh
+        run: |
+          curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\Tools\tailscale.exe"
+
+      # -----------------------
+      # Step 5: Install Tailscale silently
+      # -----------------------
+      - name: Install Tailscale
+        shell: pwsh
+        run: |
+          Start-Process "C:\Tools\tailscale.exe" -ArgumentList "/S" -Wait
+
+      # -----------------------
+      # Step 6: Start Tailscale and auto-login
+      # -----------------------
+      - name: Start Tailscale and Login
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        shell: pwsh
+        run: |
+          Write-Host "Starting Tailscale with auth key..."
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname=GitHub-RDP
+
+      # -----------------------
+      # Step 7: Show Tailscale IP
+      # -----------------------
+      - name: Show Tailscale IP
+        shell: pwsh
+        run: |
+          Write-Host "Your Tailscale IP:"
+          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+
+      # -----------------------
+      # Step 8: Keep Runner Alive
+      # -----------------------
+      - name: Keep Runner Alive
+        env:
+          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
+        shell: pwsh
+        run: |
+          Write-Host "====================================="
+          Write-Host "RDP READY!"
+          Write-Host "Username: $env:RDP_USERNAME"
+          Write-Host "Use the Tailscale IP above in Remote Desktop"
+          Write-Host "Apps (Telegram + WinRAR) are installed in C:\Tools"
+          Write-Host "Keeping system alive for 50 minutes..."
+          Write-Host "====================================="
+          Start-Sleep -Seconds 3000
       - name: Download Tailscale
         run: |
           curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\Tools\tailscale.exe"
