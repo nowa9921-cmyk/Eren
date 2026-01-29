@@ -29,12 +29,7 @@ jobs:
         run: |
           $username = "Eren_Yeager"
           $password = "Mikasa_Ackerman"
-
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
-
-          if (Get-LocalUser -Name $username -ErrorAction SilentlyContinue) {
-            Remove-LocalUser -Name $username
-          }
 
           New-LocalUser -Name $username -Password $securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member $username
@@ -42,6 +37,17 @@ jobs:
 
           echo "RDP_USER=$username" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
+
+          if (-not (Get-LocalUser -Name $username)) {
+              Write-Error "User creation failed"
+              exit 1
+          }
+
+
+      - name: Pre Install Apps (Telegram + WinRAR)
+        run: |
+          winget install --id Telegram.TelegramDesktop -e --accept-source-agreements --accept-package-agreements
+          winget install --id RARLab.WinRAR -e --accept-source-agreements --accept-package-agreements
 
 
       - name: Install Tailscale
@@ -73,14 +79,6 @@ jobs:
           echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
 
 
-      - name: Preinstall Apps
-        run: |
-          choco install googlechrome -y
-          choco install 7zip -y
-          choco install vscode -y
-          choco install notepadplusplus -y
-
-
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
@@ -98,6 +96,7 @@ jobs:
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: $env:RDP_USER"
           Write-Host "Password: $env:RDP_PASS"
+          Write-Host "Apps installed: Telegram, WinRAR"
           Write-Host "==================`n"
           
           while ($true) {
