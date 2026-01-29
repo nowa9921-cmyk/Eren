@@ -11,26 +11,29 @@ jobs:
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
 
-      - name: Download Telegram
-        run: |
-          Invoke-WebRequest https://telegram.org/dl/desktop/win -OutFile C:\telegram.exe -UseBasicParsing
-
-      - name: Download WinRAR
-        run: |
-          Invoke-WebRequest https://www.rarlab.com/rar/winrar-x64-621.exe -OutFile C:\winrar.exe -UseBasicParsing
-
       - name: Create Intro Folder
         run: |
           mkdir C:\Intro
+
+      - name: Download Telegram Desktop
+        run: |
+          curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "C:\telegram.exe"
+
+      - name: Download WinRAR
+        run: |
+          curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "C:\winrar.exe"
 
       - name: Download AOT Intro
         run: |
           curl.exe -L "https://archive.org/download/aot-intro1/AOT_Intro_1.mp4" -o "C:\Intro\aot.mp4"
 
-      - name: Run Tailscale Installer
+      - name: Download Tailscale
         run: |
-          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup.exe" -OutFile "C:\tailscale.exe" -UseBasicParsing
-          Start-Process C:\tailscale.exe -Wait
+          curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\tailscale.exe"
+
+      - name: Install Tailscale
+        run: |
+          Start-Process "C:\tailscale.exe" -Wait
 
       - name: Finish Setup
         run: |
