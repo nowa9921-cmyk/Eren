@@ -1,4 +1,4 @@
-name: Windows RDP with Tailscale + Apps + AOT Intro
+name: Windows RDP + Tailscale Full
 
 on:
   workflow_dispatch:
@@ -6,35 +6,51 @@ on:
 jobs:
   rdp:
     runs-on: windows-latest
+
     steps:
-      - name: Enable RDP
+      - name: Enable RDP and set credentials
+        env:
+          RDP_USER: ${{ secrets.RDP_USERNAME }}
+          RDP_PASS: ${{ secrets.RDP_PASSWORD }}
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          net user $env:RDP_USER $env:RDP_PASS
 
-      - name: Create Intro Folder
-        run: |
-          mkdir C:\Intro
+      - name: Create Tools Folder
+        run: mkdir C:\Tools
 
-      - name: Download Telegram Desktop
+      - name: Download Apps
         run: |
-          curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "C:\telegram.exe"
-
-      - name: Download WinRAR
-        run: |
-          curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "C:\winrar.exe"
-
-      - name: Download AOT Intro
-        run: |
-          curl.exe -L "https://archive.org/download/aot-intro1/AOT_Intro_1.mp4" -o "C:\Intro\aot.mp4"
+          curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "C:\Tools\telegram.exe"
+          curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "C:\Tools\winrar.exe"
 
       - name: Download Tailscale
         run: |
-          curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\tailscale.exe"
+          curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\Tools\tailscale.exe"
 
       - name: Install Tailscale
         run: |
-          Start-Process "C:\tailscale.exe" -Wait
+          Start-Process "C:\Tools\tailscale.exe" -ArgumentList "/S" -Wait
 
-      - name: Finish Setup
+      - name: Start Tailscale and Login
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          Write-Host "Windows RDP + Apps + AOT Intro setup complete!"
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname=GitHub-RDP
+
+      - name: Show Tailscale IP
+        run: |
+          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+
+      - name: Keep Runner Alive
+        env:
+          RDP_USER: ${{ secrets.RDP_USERNAME }}
+        run: |
+          Write-Host "====================================="
+          Write-Host "RDP READY!"
+          Write-Host "Username: $env:RDP_USER"
+          Write-Host "Use the Tailscale IP above in Remote Desktop"
+          Write-Host "Keeping system alive for 50 minutes..."
+          Write-Host "====================================="
+          Start-Sleep -Seconds 3000
