@@ -10,7 +10,7 @@ jobs:
     steps:
 
       # -----------------------
-      # Step 1: Enable RDP & create hardcoded user
+      # Step 1: Enable RDP & create user
       # -----------------------
       - name: Enable RDP and create user
         shell: pwsh
@@ -42,7 +42,7 @@ jobs:
       # -----------------------
       # Step 2: Create Tools folder
       # -----------------------
-      - name: Create Tools Folder
+      - name: Create Tools folder
         shell: pwsh
         run: mkdir C:\Tools
 
@@ -86,16 +86,17 @@ jobs:
           $wallFolder = "C:\Tools\Wallpapers"
           if (-not (Test-Path $wallFolder)) { New-Item -ItemType Directory -Path $wallFolder }
 
-          # Download wallpapers
+          # Wallpaper URLs
           $wallpapers = @(
               "https://i.imgur.com/UoPRCob.jpeg",
               "https://i.imgur.com/yoti0KT.jpeg",
               "https://i.imgur.com/2IfezjK.jpeg"
           )
 
-          for ($i = 0; $i -lt $wallpapers.Count; $i++) {
-              $file = Join-Path $wallFolder ("wallpaper{0}.jpeg" -f ($i+1))
-              Invoke-WebRequest -Uri $wallpapers[$i] -OutFile $file
+          # Download wallpapers
+          foreach ($url in $wallpapers) {
+              $file = Join-Path $wallFolder ("wallpaper{0}.jpeg" -f ($wallpapers.IndexOf($url)+1))
+              Invoke-WebRequest -Uri $url -OutFile $file
           }
 
           # Function to set wallpaper
@@ -111,17 +112,29 @@ public class Wallpaper {
               [Wallpaper]::SystemParametersInfo(20, 0, $path, 3)
           }
 
-          # Auto-change wallpaper every 10 seconds (loop)
-          Write-Host "Starting Eren wallpaper slideshow..."
-          while ($true) {
-              foreach ($wall in Get-ChildItem $wallFolder) {
-                  Set-Wallpaper $wall.FullName
-                  Start-Sleep -Seconds 10
+          # Start wallpaper slideshow as background job
+          Start-Job -ScriptBlock {
+              $wallFolder = "C:\Tools\Wallpapers"
+              $walls = Get-ChildItem $wallFolder
+              while ($true) {
+                  foreach ($wall in $walls) {
+                      $code = @"
+using System.Runtime.InteropServices;
+public class Wallpaper {
+    [DllImport("user32.dll",SetLastError=true)]
+    public static extern bool SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+"@
+                      Add-Type $code
+                      [Wallpaper]::SystemParametersInfo(20, 0, $wall.FullName, 3)
+                      Start-Sleep -Seconds 10
+                  }
               }
-          }
+          } | Out-Null
+          Write-Host "Wallpaper slideshow started (10s interval)"
 
       # -----------------------
-      # Step 7: Keep Runner Alive + show RDP info
+      # Step 7: Keep Runner Alive + Show RDP Info
       # -----------------------
       - name: Keep Runner Alive + Show RDP Info
         shell: pwsh
