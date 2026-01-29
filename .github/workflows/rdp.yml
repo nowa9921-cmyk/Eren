@@ -3,16 +3,18 @@ name: Windows RDP + Tailscale + Eren Setup
 on:
   workflow_dispatch:
 
+concurrency:
+  group: rdp-setup
+  cancel-in-progress: true   # ensures only one run at a time
+
 jobs:
   rdp:
     runs-on: windows-latest
 
     steps:
-
-      # Step 0: Checkout (optional if you have scripts)
       - uses: actions/checkout@v4
 
-      # Step 1: Enable RDP & create user safely
+      # Enable RDP & create user safely
       - name: Enable RDP and create user
         shell: pwsh
         run: |
@@ -33,7 +35,7 @@ jobs:
               Write-Host "Password for $User updated successfully."
           }
 
-      # Step 2: Create Tools folder safely
+      # Create Tools folder safely
       - name: Create Tools folder
         shell: pwsh
         run: |
@@ -45,23 +47,25 @@ jobs:
               Write-Host "$toolsFolder already exists, skipping creation."
           }
 
-      # Step 3: Download Telegram + WinRAR
+      # Download Telegram + WinRAR
       - name: Download Apps
         shell: pwsh
         run: |
           curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "C:\Tools\telegram.exe"
           curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "C:\Tools\winrar.exe"
 
-      # Step 4: Download & install Tailscale
-      - name: Download Tailscale
+      # Download Tailscale CLI installer (headless-safe)
+      - name: Download Tailscale MSI
         shell: pwsh
-        run: curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\Tools\tailscale.exe"
+        run: |
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup.msi" -OutFile "C:\Tools\tailscale.msi"
 
+      # Install Tailscale silently
       - name: Install Tailscale silently
         shell: pwsh
-        run: Start-Process "C:\Tools\tailscale.exe" -ArgumentList "/S" -Wait
+        run: Start-Process "msiexec.exe" -ArgumentList "/i C:\Tools\tailscale.msi /qn /norestart" -Wait
 
-      # Step 5: Start Tailscale and login
+      # Start Tailscale CLI
       - name: Start Tailscale
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
@@ -69,7 +73,7 @@ jobs:
         run: |
           & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname=GitHub-RDP
 
-      # Step 6: Keep Runner Alive + Show RDP Info
+      # Keep Runner Alive + Show RDP Info
       - name: Keep Runner Alive + Show RDP Info
         shell: pwsh
         run: |
@@ -80,7 +84,7 @@ jobs:
           Write-Host "Username: Eren_Yeager"
           Write-Host "Password: Mikasa_Yeager"
           Write-Host "Apps installed in C:\Tools"
-          Write-Host "Wallpaper step skipped to avoid errors"
+          Write-Host "Wallpaper step skipped"
           Write-Host "Keep this window open to maintain RDP access"
           Write-Host "====================================="
           Start-Sleep -Seconds 3000
