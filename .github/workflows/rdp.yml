@@ -6,7 +6,7 @@ on:
 jobs:
   rdp:
     runs-on: windows-latest
-    timeout-minutes: 360   # 6 hours
+    timeout-minutes: 360
 
     steps:
     - name: Install Tailscale
@@ -44,22 +44,16 @@ jobs:
         Invoke-WebRequest https://www.rarlab.com/rar/winrar-x64-621.exe -OutFile winrar.exe
         Start-Process winrar.exe -ArgumentList "/S" -Wait
 
-    - name: Add Attack on Titan Intro at Startup
+    - name: Add AOT Intro at Startup
       run: |
         mkdir C:\Intro
 
-        # Download AOT Intro Video
         Invoke-WebRequest "https://archive.org/download/aot-intro1/AOT_Intro_1.mp4" -OutFile "C:\Intro\aot.mp4"
 
-        # Create launcher script
-        $launcher = @'
-Start-Process "wmplayer.exe" "C:\Intro\aot.mp4"
-'@
-        Set-Content -Path "C:\Intro\play_intro.ps1" -Value $launcher
+        echo Start-Process wmplayer.exe "C:\Intro\aot.mp4" > C:\Intro\play_intro.ps1
 
-        # Place in Startup folder
         $startup = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\play_intro.ps1"
-        Copy-Item "C:\Intro\play_intro.ps1" $startup
+        Copy-Item C:\Intro\play_intro.ps1 $startup
 
     - name: Show Tailscale IP
       run: |
