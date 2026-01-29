@@ -8,14 +8,24 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Enable RDP and set credentials
+      - name: Enable RDP and set credentials safely
         env:
-          RDP_USER: ${{ secrets.RDP_USERNAME }}
-          RDP_PASS: ${{ secrets.RDP_PASSWORD }}
+          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
+          RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          net user $env:RDP_USER $env:RDP_PASS
+
+          $User = $env:RDP_USERNAME
+          $Pass = $env:RDP_PASSWORD
+
+          if (!(Get-LocalUser -Name $User -ErrorAction SilentlyContinue)) {
+              net user "$User" "$Pass" /add
+          } else {
+              net user "$User" "$Pass"
+          }
+
+          Add-LocalGroupMember -Group "Administrators" -Member $User
 
       - name: Create Tools Folder
         run: mkdir C:\Tools
@@ -45,11 +55,11 @@ jobs:
 
       - name: Keep Runner Alive
         env:
-          RDP_USER: ${{ secrets.RDP_USERNAME }}
+          RDP_USERNAME: ${{ secrets.RDP_USERNAME }}
         run: |
           Write-Host "====================================="
           Write-Host "RDP READY!"
-          Write-Host "Username: $env:RDP_USER"
+          Write-Host "Username: $env:RDP_USERNAME"
           Write-Host "Use the Tailscale IP above in Remote Desktop"
           Write-Host "Keeping system alive for 50 minutes..."
           Write-Host "====================================="
