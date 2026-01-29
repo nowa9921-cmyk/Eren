@@ -9,7 +9,9 @@ jobs:
 
     steps:
 
+      # -----------------------
       # Step 1: Enable RDP & create user
+      # -----------------------
       - name: Enable RDP and create user
         shell: pwsh
         run: |
@@ -37,19 +39,25 @@ jobs:
               Write-Host "$User is already Administrator."
           }
 
+      # -----------------------
       # Step 2: Create Tools folder
+      # -----------------------
       - name: Create Tools folder
         shell: pwsh
         run: mkdir C:\Tools
 
+      # -----------------------
       # Step 3: Download Telegram + WinRAR
+      # -----------------------
       - name: Download Apps
         shell: pwsh
         run: |
           curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "C:\Tools\telegram.exe"
           curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "C:\Tools\winrar.exe"
 
+      # -----------------------
       # Step 4: Download & install Tailscale
+      # -----------------------
       - name: Download Tailscale
         shell: pwsh
         run: curl.exe -L "https://pkgs.tailscale.com/stable/tailscale-ipn-setup.exe" -o "C:\Tools\tailscale.exe"
@@ -58,7 +66,9 @@ jobs:
         shell: pwsh
         run: Start-Process "C:\Tools\tailscale.exe" -ArgumentList "/S" -Wait
 
+      # -----------------------
       # Step 5: Start Tailscale and login
+      # -----------------------
       - name: Start Tailscale
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
@@ -66,7 +76,9 @@ jobs:
         run: |
           & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname=GitHub-RDP
 
+      # -----------------------
       # Step 6: Download wallpapers & start slideshow
+      # -----------------------
       - name: Eren Wallpapers Auto-Change
         shell: pwsh
         run: |
@@ -84,7 +96,7 @@ jobs:
               Invoke-WebRequest -Uri $url -OutFile $file
           }
 
-          # Create slideshow script separately to avoid YAML errors
+          # Create slideshow script separately (avoids YAML syntax errors)
           $slideshowScript = "C:\Tools\wallpaper_slideshow.ps1"
           @'
 function Set-Wallpaper($path) {
@@ -112,7 +124,9 @@ while ($true) {
           Start-Process pwsh -ArgumentList "-File `"$slideshowScript`"" -WindowStyle Hidden
           Write-Host "Wallpaper slideshow started (10s interval)"
 
+      # -----------------------
       # Step 7: Keep Runner Alive + Show RDP Info
+      # -----------------------
       - name: Keep Runner Alive + Show RDP Info
         shell: pwsh
         run: |
