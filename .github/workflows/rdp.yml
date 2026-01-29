@@ -1,90 +1,84 @@
-name: Windows RDP + Tailscale + Eren Setup
+name: RDP + Tailscale + Eren Setup
 
 on:
   workflow_dispatch:
 
-concurrency:
-  group: rdp-setup
-  cancel-in-progress: true   # ensures only one run at a time
-
 jobs:
-  rdp:
+  secure-rdp:
     runs-on: windows-latest
+    timeout-minutes: 3600
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Enable RDP
+        shell: pwsh
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name SecurityLayer -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP-Tailscale" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service TermService -Force
 
-      # Enable RDP & create user safely
-      - name: Enable RDP and create user
+      - name: Create RDP User
         shell: pwsh
         run: |
           $User = "Eren_Yeager"
-          $Pass = "Mikasa_Yeager"
+          $Pass = "Mikasa_Ackerman"
+          $secure = ConvertTo-SecureString $Pass -AsPlainText -Force
 
-          Write-Host "=== Enabling RDP ==="
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-          Write-Host "=== Creating or updating user safely ==="
           if (-not (Get-LocalUser -Name $User -ErrorAction SilentlyContinue)) {
-              New-LocalUser -Name $User -Password (ConvertTo-SecureString $Pass -AsPlainText -Force)
+              New-LocalUser -Name $User -Password $secure -AccountNeverExpires
               Add-LocalGroupMember -Group "Administrators" -Member $User
-              Write-Host "User $User created and added to Administrators."
+              Add-LocalGroupMember -Group "Remote Desktop Users" -Member $User
           } else {
-              Set-LocalUser -Name $User -Password (ConvertTo-SecureString $Pass -AsPlainText -Force)
-              Write-Host "Password for $User updated successfully."
+              Set-LocalUser -Name $User -Password $secure
           }
 
-      # Create Tools folder safely
-      - name: Create Tools folder
+          echo "RDP_USER=$User" >> $env:GITHUB_ENV
+          echo "RDP_PASS=$Pass" >> $env:GITHUB_ENV
+
+      - name: Pre-install Apps
         shell: pwsh
         run: |
-          $toolsFolder = "C:\Tools"
-          if (-not (Test-Path $toolsFolder)) {
-              New-Item -ItemType Directory -Path $toolsFolder
-              Write-Host "$toolsFolder created."
-          } else {
-              Write-Host "$toolsFolder already exists, skipping creation."
-          }
+          $tools="C:\Tools"
+          if (-not (Test-Path $tools)) { New-Item -ItemType Directory -Path $tools }
+          curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "$tools\Telegram.exe"
+          curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "$tools\WinRAR.exe"
 
-      # Download Telegram + WinRAR
-      - name: Download Apps
+      - name: Install Tailscale
         shell: pwsh
         run: |
-          curl.exe -L "https://telegram.org/dl/desktop/win/Telegram.exe" -o "C:\Tools\telegram.exe"
-          curl.exe -L "https://www.rarlab.com/rar/winrar-x64-621.exe" -o "C:\Tools\winrar.exe"
+          $url="https://pkgs.tailscale.com/stable/tailscale-setup.msi"
+          $file="$env:TEMP\tailscale.msi"
+          Invoke-WebRequest $url -OutFile $file
+          Start-Process msiexec.exe -ArgumentList "/i `"$file`" /quiet /norestart" -Wait
+          Remove-Item $file -Force
 
-      # Download Tailscale CLI installer (headless-safe)
-      - name: Download Tailscale MSI
+      - name: Auto-login Tailscale
         shell: pwsh
-        run: |
-          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup.msi" -OutFile "C:\Tools\tailscale.msi"
-
-      # Install Tailscale silently
-      - name: Install Tailscale silently
-        shell: pwsh
-        run: Start-Process "msiexec.exe" -ArgumentList "/i C:\Tools\tailscale.msi /qn /norestart" -Wait
-
-      # Start Tailscale CLI
-      - name: Start Tailscale
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
-        shell: pwsh
         run: |
-          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey=$env:TS_AUTHKEY --hostname=GitHub-RDP
+          $tsExe="$env:ProgramFiles\Tailscale\tailscale.exe"
+          & $tsExe up --authkey=$env:TS_AUTHKEY --hostname=gh-runner-$env:GITHUB_RUN_ID
 
-      # Keep Runner Alive + Show RDP Info
-      - name: Keep Runner Alive + Show RDP Info
+          $tsIP=$null
+          for ($i=0; $i -lt 12; $i++) {
+              $tsIP = & $tsExe ip -4
+              if ($tsIP) { break }
+              Start-Sleep 5
+          }
+          if (-not $tsIP) { Write-Error "Tailscale IP not assigned"; exit 1 }
+          echo "TS_IP=$tsIP" >> $env:GITHUB_ENV
+
+      - name: Show RDP Info
         shell: pwsh
         run: |
-          Write-Host "====================================="
+          Write-Host "=================================="
           Write-Host "RDP READY!"
-          Write-Host "Server (Tailscale IP):"
-          & "C:\Program Files\Tailscale\tailscale.exe" ip -4
-          Write-Host "Username: Eren_Yeager"
-          Write-Host "Password: Mikasa_Yeager"
+          Write-Host "Server IP (Tailscale): $env:TS_IP"
+          Write-Host "Username: $env:RDP_USER"
+          Write-Host "Password: $env:RDP_PASS"
           Write-Host "Apps installed in C:\Tools"
-          Write-Host "Wallpaper step skipped"
-          Write-Host "Keep this window open to maintain RDP access"
-          Write-Host "====================================="
-          Start-Sleep -Seconds 3000
+          Write-Host "=================================="
+          while ($true) { Start-Sleep 300 }
